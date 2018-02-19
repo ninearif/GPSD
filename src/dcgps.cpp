@@ -23,7 +23,7 @@
 -- 	is found it starts to read data from the gps dongle. The data is then displayed on the
 --	ncurses window.
 ----------------------------------------------------------------------------------------*/
-#include "header.h"
+#include "common/header.h"
 
 /* ---------------------------------------------------------------------------------------
 --
@@ -44,154 +44,127 @@
 --	At the end of the program, the cleanup method is called to close the gps stream and windows.
 ----------------------------------------------------------------------------------------*/
 int main() {
+    unsigned int flags = WATCH_ENABLE;
+    static struct fixsource_t source;
 
-	unsigned int flags = WATCH_ENABLE;
-	static struct fixsource_t source;
+    pthread_t thread;
 
-	WINDOW *win, *satelliteWin;
+    //malloc gps data structure
+    auto *gps_data_p = (gps_data_t *) malloc(sizeof(struct gps_data_t));
 
-	pthread_t thread;
+    //set source information
+    source.server = HOST;
+    source.port = DEFAULT_GPSD_PORT;
+    source.device = nullptr;
 
-	//malloc gps data structure
-	gps_data_t *gps_data_p = (gps_data_t*) malloc(sizeof(struct gps_data_t));
+    //open the gpsd stream
+    if (gps_open(source.server, source.port, gps_data_p) == -1) {
+        cerr <<  "Error: Cannot open gpsd stream" << endl;
+        exit(0);
+    }
 
-	//set source information
-	source.server = LOCAL_HOST;
-	source.port = DEFAULT_GPSD_PORT;
-	source.device = NULL;
+    if (source.device != nullptr) {
+        flags |= WATCH_DEVICE;
+    }
 
-	//open the gpsd stream
-	if(gps_open(source.server, source.port, gps_data_p) == -1){
-		fprintf(stderr, "Error: Cannot open gpsd stream.\n");
-		exit(0);
-	}
+    gps_stream(gps_data_p, flags, source.device);
 
-	if(source.device != NULL){
-		flags |= WATCH_DEVICE;
-	}
+    // initializes wWindowData structure to pass into readThread
+    auto *thData = (windowData *) malloc(sizeof(struct windowData));
+    thData->gps_data = gps_data_p;
 
-	gps_stream(gps_data_p, flags, source.device);
-	
-	if ( (win = initscr()) == NULL) {
-	 	cerr << "Could not initialize screen" << endl;
-	}
-
-	// window settings
-    initscr();
-    cbreak();
-    keypad(stdscr, true);
-    curs_set(0);
-    noecho();
-
-    start_color();
-	refresh();
-
-	// initialize both windows
-	win = createNewWindow(13,45,0,0);
-	satelliteWin = createNewWindow(13,45,0,45);
-
-	// setup window labels
-	setUpLeftWindow(win);
-	setUpRightWindow(satelliteWin);
-
-	// initializes wWindowData structure to pass into readThread
-	windowData* thData = (windowData*)malloc(sizeof(struct windowData));
-	thData->gps_data = gps_data_p;
-	thData->satelliteWin = satelliteWin;
-	thData->win = win;
-
-	// create thread & pass structure into it
-	pthread_create(&thread, NULL, gpsRead, (void*) thData);
-	getch();
-	// clean up procedure for windows
-	endwin();
-	cleanup(thData, GPS_QUIT);
+    cout << "HI" << endl;
+    // create thread & pass structure into it
+    gpsRead((void *) thData);
+//    pthread_create(&thread, nullptr, gpsRead, (void *) thData);
+    // clean up procedure
+    cleanup(thData, GPS_QUIT);
 }
-
-/* ---------------------------------------------------------------------------------------
---
---	FUNCTION:		createNewWindow
---
---	DATE:			November, 8. 2015
---
---	DESIGNER:		Oscar Kwan
---
---	PROGRAMMER:		Oscar Kwan
---
---  INTERFACE:      WINDOW *createNewWindow(int height, int width, int starty, int startx)
---
---	RETURNS:		Returns the window (local_win)
---
---	NOTES:
---	This function is used to initialize the ncurses window. You can pass in the size and
---	the coordinates where the window should start at.
-----------------------------------------------------------------------------------------*/
-
-WINDOW *createNewWindow(int height, int width, int starty, int startx) {
-	WINDOW *local_win;
-
-	local_win = newwin(height, width, starty, startx);
-	box(local_win, 0, 0);
-	wrefresh(local_win);  //shows box
-
-	return local_win;
-}
-
-/* ---------------------------------------------------------------------------------------
---
---	FUNCTION:		setUpLeftWindow
---
---	DATE:			November, 8. 2015
---
---	DESIGNER:		Oscar Kwan
---
---	PROGRAMMER:		Oscar Kwan
---
---  INTERFACE:      void setUpLeftWindow(WINDOW *win)
---
---	RETURNS:		Returns nothing
---
---	NOTES:
---	Intializes the the left side of the window. This window displays general information
--- 	about the gps such as the latitude and longitude.
-----------------------------------------------------------------------------------------*/
-void setUpLeftWindow(WINDOW *win) {
-	wattrset(win, A_BOLD);
-	start_color();
-	init_pair(1, COLOR_RED, COLOR_BLACK);
-	wattron(win, COLOR_PAIR(1));
-	mvwprintw(win, 1, 2, "DCGPS");
-	mvwprintw(win, 3, 2, "Time:");
-	mvwprintw(win, 5, 2, "Latitude:");
-	mvwprintw(win, 7, 2, "Longitude:");
-	mvwprintw(win, 9, 2, "Speed:");
-	mvwprintw(win, 11, 2, "Status:");
-	wattroff(win, COLOR_PAIR(1));
-	wrefresh(win);
-}
-
-/* ---------------------------------------------------------------------------------------
---
---	FUNCTION:		setUpRightWindow
---
---	DATE:			November, 8. 2015
---
---	DESIGNER:		Oscar Kwan
---
---	PROGRAMMER:		Oscar Kwan
---
---  INTERFACE:      void setUpRightWindow(WINDOW* satelliteWin)
---
---	RETURNS:		Returns nothing
---
---	NOTES:
---	Intializes the the right side of the window. This window displays specific information
---	regarding each satellite that is being received by the gps dongle.
-----------------------------------------------------------------------------------------*/
-void setUpRightWindow(WINDOW* satelliteWin) {
-	wattrset(satelliteWin, A_BOLD);
-	wattron(satelliteWin, COLOR_PAIR(1));
-	mvwprintw(satelliteWin, 1, 2, "PRN    Elevation    Azimuth   SNR  Used");
-	wattroff(satelliteWin, COLOR_PAIR(1));
-	wrefresh(satelliteWin);
-}
+//
+///* ---------------------------------------------------------------------------------------
+//--
+//--	FUNCTION:		createNewWindow
+//--
+//--	DATE:			November, 8. 2015
+//--
+//--	DESIGNER:		Oscar Kwan
+//--
+//--	PROGRAMMER:		Oscar Kwan
+//--
+//--  INTERFACE:      WINDOW *createNewWindow(int height, int width, int starty, int startx)
+//--
+//--	RETURNS:		Returns the window (local_win)
+//--
+//--	NOTES:
+//--	This function is used to initialize the ncurses window. You can pass in the size and
+//--	the coordinates where the window should start at.
+//----------------------------------------------------------------------------------------*/
+//
+//WINDOW *createNewWindow(int height, int width, int starty, int startx) {
+//	WINDOW *local_win;
+//
+//	local_win = newwin(height, width, starty, startx);
+//	box(local_win, 0, 0);
+//	wrefresh(local_win);  //shows box
+//
+//	return local_win;
+//}
+//
+///* ---------------------------------------------------------------------------------------
+//--
+//--	FUNCTION:		setUpLeftWindow
+//--
+//--	DATE:			November, 8. 2015
+//--
+//--	DESIGNER:		Oscar Kwan
+//--
+//--	PROGRAMMER:		Oscar Kwan
+//--
+//--  INTERFACE:      void setUpLeftWindow(WINDOW *win)
+//--
+//--	RETURNS:		Returns nothing
+//--
+//--	NOTES:
+//--	Intializes the the left side of the window. This window displays general information
+//-- 	about the gps such as the latitude and longitude.
+//----------------------------------------------------------------------------------------*/
+//void setUpLeftWindow(WINDOW *win) {
+//	wattrset(win, A_BOLD);
+//	start_color();
+//	init_pair(1, COLOR_RED, COLOR_BLACK);
+//	wattron(win, COLOR_PAIR(1));
+//	mvwprintw(win, 1, 2, "DCGPS");
+//	mvwprintw(win, 3, 2, "Time:");
+//	mvwprintw(win, 5, 2, "Latitude:");
+//	mvwprintw(win, 7, 2, "Longitude:");
+//	mvwprintw(win, 9, 2, "Speed:");
+//	mvwprintw(win, 11, 2, "Status:");
+//	wattroff(win, COLOR_PAIR(1));
+//	wrefresh(win);
+//}
+//
+///* ---------------------------------------------------------------------------------------
+//--
+//--	FUNCTION:		setUpRightWindow
+//--
+//--	DATE:			November, 8. 2015
+//--
+//--	DESIGNER:		Oscar Kwan
+//--
+//--	PROGRAMMER:		Oscar Kwan
+//--
+//--  INTERFACE:      void setUpRightWindow(WINDOW* satelliteWin)
+//--
+//--	RETURNS:		Returns nothing
+//--
+//--	NOTES:
+//--	Intializes the the right side of the window. This window displays specific information
+//--	regarding each satellite that is being received by the gps dongle.
+//----------------------------------------------------------------------------------------*/
+//void setUpRightWindow(WINDOW* satelliteWin) {
+//	wattrset(satelliteWin, A_BOLD);
+//	wattron(satelliteWin, COLOR_PAIR(1));
+//	mvwprintw(satelliteWin, 1, 2, "PRN    Elevation    Azimuth   SNR  Used");
+//	wattroff(satelliteWin, COLOR_PAIR(1));
+//	wrefresh(satelliteWin);
+//}

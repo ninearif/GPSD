@@ -43,29 +43,28 @@
 --  If we are successful at reading the GPS data, the data is sent to the printData
 --  function to display it on the screen.
 ----------------------------------------------------------------------------------------*/
-void* gpsRead(void *ptr) { 
-
-	// gets structure
-	windowData* wWindowData = (windowData*) ptr;
-
-	while(1) {
-		if(!gps_waiting(wWindowData->gps_data, 500000)) {
-
-			cleanup(wWindowData, GPS_TIMEOUT);
-			break;
-		} else {
-			if(gps_read(wWindowData->gps_data) == -1){
-
-				cleanup(wWindowData, GPS_ERROR);
-				break;
-			} else {
-				// print gps data
-				printData(wWindowData);
-			}
-		}
-	}
-
-	return wWindowData;
+void *gpsRead(void *ptr) {
+    // gets structure
+    auto *wWindowData = (windowData *) ptr;
+    cerr << "GPS READ" << endl;
+    while (true) {
+        if (!gps_waiting(wWindowData->gps_data, 500000)) {
+            cerr << "GPS TIMEOUT" << endl;
+            cleanup(wWindowData, GPS_TIMEOUT);
+            break;
+        } else {
+            if (gps_read(wWindowData->gps_data) == -1) {
+                cerr << "GPS ERR" << endl;
+                cleanup(wWindowData, GPS_ERROR);
+                break;
+            } else {
+                cerr << "GPS PRINT" << endl;
+                // print gps data
+                printData(wWindowData);
+            }
+        }
+    }
+    return wWindowData;
 }
 
 /* ---------------------------------------------------------------------------------------
@@ -90,30 +89,23 @@ void* gpsRead(void *ptr) {
 --  memory.  If the cleanup was called by an error or timeout, an appropriate error msg
 --  is displayed to the user.
 ----------------------------------------------------------------------------------------*/
-void cleanup(windowData* wWindowData, int message) {
+void cleanup(windowData *wWindowData, int message) {
+    gps_stream(wWindowData->gps_data, WATCH_DISABLE, nullptr);
+    gps_close(wWindowData->gps_data);
+    free(wWindowData->gps_data);
+    free(wWindowData);
 
-    if (!isendwin())
-    {
-	// kill the ncurses window so we get the terminal back
-	(void)endwin();
+    switch (message) {
+        case GPS_QUIT:
+            break;
+        case GPS_ERROR:
+            cout << "GPS error" << endl;
+            break;
+        case GPS_TIMEOUT:
+            cout << "GPS timed out" << endl;
+            break;
+        default:
+            break;
     }
-
-	gps_stream(wWindowData->gps_data, WATCH_DISABLE, NULL);
-	gps_close(wWindowData->gps_data);
-	free(wWindowData->gps_data);
-	free(wWindowData);
-
-	switch(message){
-		case GPS_QUIT:
-			break;
-		case GPS_ERROR:
-			(void)fprintf(stderr, "GPS error\n");
-			break;
-		case GPS_TIMEOUT:
-			(void)fprintf(stderr, "GPS timed out\n");
-			break;
-		default:
-			break;
-	}
-	exit(1);
+    exit(1);
 }
