@@ -58,7 +58,7 @@ void *gpsRead(void *ptr) {
                 cleanup(wWindowData, GPS_ERROR);
                 break;
             } else {
-                cerr << "GPS PRINT" << endl;
+                cout << "GPS PRINT" << endl;
                 // print gps data
                 printData(wWindowData);
             }
